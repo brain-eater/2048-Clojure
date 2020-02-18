@@ -37,9 +37,13 @@
   (let [reverse-matrix (reverse matrix)]
     (apply map vector reverse-matrix)))
 
-(defn remove-zeros-from-start
+(defn remove-zeros-from-extremes
   [list]
-  (drop-while zero? list))
+  (->> list
+    (drop-while zero?)
+    (reverse)
+    (drop-while zero?)
+       (reverse)))
 
 (defn add-zeros-at-start
   [size list]
@@ -62,7 +66,7 @@
   [row]
   (let [size (count row)]
     (->> row
-         (remove-zeros-from-start)
+         (remove-zeros-from-extremes)
          (add-same-consecutive-numbers)
          (add-zeros-at-start size)
          (into []))))

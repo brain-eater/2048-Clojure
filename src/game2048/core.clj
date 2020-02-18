@@ -1,32 +1,55 @@
 (ns game2048.core)
 
-(defn debug [x] (do (println x) x))
+(defn debug [m, x] (do (println m " - " x) x))
 
-(defn update-board
+
+(defn update-board-values
   [board pos value]
   (let [size (count board)]
     (update-in board [(quot pos size) (rem pos size)] (fn [x] value))))
 
-(defn init-board
+(defn update-board
+  [board pos value]
+  (let [size (count board)]
+    (update-in board [(quot pos size) (rem pos size)] (fn [x] {:pos (:pos x) :val value}))))
+
+
+(defn create-cell
+  [x, y, value]
+  {:pos [x, y] :val value})
+
+(defn duplicate-cell-pos
+  [cell]
+  (create-cell (first (:pos cell)) (second (:pos cell)) 0))
+
+(defn all-positions
+  [board-values]
+  (keep-indexed (fn [index, value]
+                  (keep-indexed #(create-cell index %1 %2) value)) board-values))
+
+(defn init-values
   [size]
   (let [board (into [] (map (partial into []) (partition size (take (* size size) (repeat 0)))))
         rand-pos [
                   (rand-int (* size size))
                   (rand-int (* size size))]]
-    (reduce #(update-board %1 %2 2) board rand-pos)))
+    (reduce #(update-board-values %1 %2 2) board rand-pos)))
+
+(defn init-board
+  [size]
+  (all-positions (init-values size)))
 
 (defn draw-board
   [board]
   (doseq [row board]
     (do
-      (doseq [ele row]
-        (if (zero? ele)
+      (doseq [cell row]
+        (if (zero? (:val cell))
           (print "-" " ")
-          (print ele " ")))
+          (print (:val cell) " ")))
       (println "  "))))
 
 (defn print-instructions [] (println "w - up, a - left, s - down, d - right"))
-
 
 (defn turn-left
   [matrix]
@@ -37,39 +60,55 @@
   (let [reverse-matrix (reverse matrix)]
     (apply map vector reverse-matrix)))
 
-(defn remove-zeros-from-extremes
-  [list]
-  (->> list
-    (drop-while zero?)
-    (reverse)
-    (drop-while zero?)
-       (reverse)))
+(defn add
+  [cell1, cell2]
+  {:pos (:pos cell2) :val (+ (:val cell1) (:val cell2))})
 
-(defn add-zeros-at-start
-  [size list]
-  (concat (take (- size (count list)) (repeat 0)) list))
-
-(defn isValid [num]
-  (not (or (nil? num) (zero? num))))
+(defn cons-cell
+  [cell1, cell2, row]
+  (if (or (= (:val cell1) (:val cell2)) (zero? (:val cell2)))
+    (cons (add cell1 cell2) (rest row))
+    (cons cell1 row)))
 
 (defn add-same-consecutive-numbers
   [row]
-  (reduce (fn [row num]
-            (if (isValid num)
-              (if (= (first row) num)
-                (cons (+ num num) (rest row))
-                (cons num row))
-              row))
-          [] (reverse row)))
+  (reduce (fn [row cell]
+            (cons-cell cell (first row) row))
+          [(first (reverse row))] (rest (reverse row))))
+
+(defn remove-zeros-from-extremes
+  [list]
+  (->> list
+       (drop-while #(zero? (:val %)))
+       (reverse)
+       (drop-while #(zero? (:val %)))
+       (reverse)))
+
+(defn add-zero-at-start
+  [row]
+  (let [x (first (:pos (first row)))
+        y (- (second (:pos (first row))) 1)
+        val 0]
+    (cons
+      (create-cell x y val) row)))
+
+(defn add-zeros-at-start
+  [size row]
+  (loop [row row]
+    (if (= (count row) size)
+      row
+      (recur (add-zero-at-start row)))))
 
 (defn move-right-row
   [row]
-  (let [size (count row)]
-    (->> row
-         (remove-zeros-from-extremes)
-         (add-same-consecutive-numbers)
-         (add-zeros-at-start size)
-         (into []))))
+  (let [size (count row)
+        row-without-extreme-zeros (remove-zeros-from-extremes row)]
+    (if (empty? row-without-extreme-zeros)
+      row
+      (->> row-without-extreme-zeros
+           (add-same-consecutive-numbers)
+           (add-zeros-at-start size)
+           (into [])))))
 
 
 (defn move-right
@@ -101,7 +140,7 @@
 
 (defn get-zero-positions
   [board]
-  (keep-indexed #(when (zero? %2) %1) (flatten board)))
+  (keep-indexed #(when (zero? (:val %2)) %1) (flatten board)))
 
 (defn randomly-insert-2
   [board]
@@ -109,13 +148,13 @@
     (update-board (into [] board) (rand-nth zero-pos) 2)))
 
 (defn handle-move
-  [board move]
+  [move board]
   (if-let [board (case move
                    "w" (move-up board)
                    "d" (move-right board)
                    "a" (move-left board)
                    "s" (move-down board)
-                   (println " invalid move"))]
+                   (println " invalid move -" move))]
     (randomly-insert-2 board)
     board))
 
@@ -126,7 +165,7 @@
     (let [move (read-line)]
       (if (= move "z")
         (draw-board board)
-        (recur (handle-move board move))))))
+        (recur (handle-move move board))))))
 
 (defn -main []
   (let [board (init-board 4)]

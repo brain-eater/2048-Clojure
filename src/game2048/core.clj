@@ -11,21 +11,20 @@
 (defn update-board
   [board pos value]
   (let [size (count board)]
-    (update-in board [(quot pos size) (rem pos size)] (fn [x] {:pos (:pos x) :val value}))))
-
+    (update-in board [(quot pos size) (rem pos size)] (fn [x] {:prev-pos (:prev-pos x)
+                                                               :curr-pos (:curr-pos x)
+                                                               :val      value}))))
 
 (defn create-cell
-  [x, y, value]
-  {:pos [x, y] :val value})
-
-(defn duplicate-cell-pos
-  [cell]
-  (create-cell (first (:pos cell)) (second (:pos cell)) 0))
+  ([curr-pos value]
+   {:prev-pos nil :curr-pos curr-pos :val value})
+  ([prev-pos curr-pos, value]
+   {:prev-pos prev-pos :curr-pos curr-pos :val value}))
 
 (defn all-positions
   [board-values]
   (keep-indexed (fn [index, value]
-                  (keep-indexed #(create-cell index %1 %2) value)) board-values))
+                  (keep-indexed #(create-cell [index %1] %2) value)) board-values))
 
 (defn init-values
   [size]
@@ -62,7 +61,9 @@
 
 (defn add
   [cell1, cell2]
-  {:pos (:pos cell2) :val (+ (:val cell1) (:val cell2))})
+  {:curr-pos (:curr-pos cell2)
+   :prev-pos (:curr-pos cell1)
+   :val      (+ (:val cell1) (:val cell2))})
 
 (defn cons-cell
   [cell1, cell2, row]
@@ -70,27 +71,32 @@
     (cons (add cell1 cell2) (rest row))
     (cons cell1 row)))
 
-(defn add-same-consecutive-numbers
-  [row]
-  (reduce (fn [row cell]
-            (cons-cell cell (first row) row))
-          [(first (reverse row))] (rest (reverse row))))
+(defn change-pos-to-last
+  [cell size]
+  (let [curr-pos (:curr-pos cell)]
+    (create-cell curr-pos
+                 [(first curr-pos) (dec size)]
+                 (:val cell))))
 
-(defn remove-zeros-from-extremes
+(defn add-same-consecutive-numbers
+  [size row]
+  (let [reversed-row (reverse row)
+        last-cell (change-pos-to-last (first reversed-row) size)]
+    (reduce (fn [row cell]
+              (cons-cell cell (first row) row))
+            [last-cell] (rest reversed-row))))
+
+(defn remove-zeros
   [list]
-  (->> list
-       (drop-while #(zero? (:val %)))
-       (reverse)
-       (drop-while #(zero? (:val %)))
-       (reverse)))
+  (filter #(not (zero? (:val %))) list))
 
 (defn add-zero-at-start
   [row]
-  (let [x (first (:pos (first row)))
-        y (- (second (:pos (first row))) 1)
+  (let [x (first (:curr-pos (first row)))
+        y (- (second (:curr-pos (first row))) 1)
         val 0]
     (cons
-      (create-cell x y val) row)))
+      (create-cell [x y] val) row)))
 
 (defn add-zeros-at-start
   [size row]
@@ -102,18 +108,18 @@
 (defn move-right-row
   [row]
   (let [size (count row)
-        row-without-extreme-zeros (remove-zeros-from-extremes row)]
-    (if (empty? row-without-extreme-zeros)
+        row-without-zeros (remove-zeros row)]
+    (if (empty? row-without-zeros)
       row
-      (->> row-without-extreme-zeros
-           (add-same-consecutive-numbers)
+      (->> row-without-zeros
+           (add-same-consecutive-numbers size)
            (add-zeros-at-start size)
            (into [])))))
 
 
 (defn move-right
   [board]
-  (map move-right-row board))
+  (mapv move-right-row board))
 
 (defn move-left
   [board]
